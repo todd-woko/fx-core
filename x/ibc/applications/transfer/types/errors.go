@@ -5,5 +5,5 @@ import (
 )
 
 var (
-	ErrFeeDenomNotMatchTokenDenom = sdkerrors.Register(ModuleName, 10, "invalid fee denom, must match token denom")
+	ErrFeeDenomNotMatchTokenDenom = sdkerrors.Register(ModuleName, 100, "invalid fee denom, must match token denom")
 )
