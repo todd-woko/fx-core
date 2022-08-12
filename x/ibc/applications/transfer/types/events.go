@@ -4,8 +4,8 @@ package types
 const (
 	EventTypeReceive      = "ibc_receive"
 	EventTypeReceiveRoute = "ibc_receive_route"
+	AttributeKeyRecvError = "error"
 
-	AttributeKeyAckError     = "error"
 	AttributeKeyRouteSuccess = "success"
 	AttributeKeyRoute        = "route"
 	AttributeKeyRouteError   = "error"

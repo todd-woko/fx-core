@@ -2,9 +2,10 @@ package transfer
 
 import (
 	"fmt"
-	"strings"
 
 	transfertypes "github.com/cosmos/ibc-go/v3/modules/apps/transfer/types"
+
+	"github.com/functionx/fx-core/v2/x/ibc/applications/transfer/parser"
 
 	"github.com/functionx/fx-core/v2/x/ibc"
 
@@ -72,11 +73,11 @@ func (im IBCMiddleware) OnRecvPacket(
 
 	// only attempt the application logic if the packet data
 	// was successfully decoded
+	var err error
 	if ack.Success() {
 		if len(data.GetFee()) == 0 {
 			data.Fee = sdk.ZeroInt().String()
 		}
-		var err error
 		// if router set, route packet
 		if ctx.BlockHeight() >= fxtypes.IBCRouteBlock() && data.Router != "" {
 			err = im.keeper.FxOnRecvPacket(ctx, packet, data)
@@ -89,15 +90,20 @@ func (im IBCMiddleware) OnRecvPacket(
 		}
 	}
 
+	event := sdk.NewEvent(
+		transfertypes.EventTypePacket,
+		sdk.NewAttribute(sdk.AttributeKeyModule, types.ModuleName),
+		sdk.NewAttribute(transfertypes.AttributeKeyReceiver, data.Receiver),
+		sdk.NewAttribute(transfertypes.AttributeKeyDenom, data.Denom),
+		sdk.NewAttribute(transfertypes.AttributeKeyAmount, data.Amount),
+		sdk.NewAttribute(transfertypes.AttributeKeyAckSuccess, fmt.Sprintf("%t", ack.Success())),
+	)
+
+	if err != nil {
+		event = event.AppendAttributes(sdk.NewAttribute(types.AttributeKeyRecvError, err.Error()))
+	}
 	ctx.EventManager().EmitEvent(
-		sdk.NewEvent(
-			transfertypes.EventTypePacket,
-			sdk.NewAttribute(sdk.AttributeKeyModule, types.ModuleName),
-			sdk.NewAttribute(transfertypes.AttributeKeyReceiver, data.Receiver),
-			sdk.NewAttribute(transfertypes.AttributeKeyDenom, data.Denom),
-			sdk.NewAttribute(transfertypes.AttributeKeyAmount, data.Amount),
-			sdk.NewAttribute(transfertypes.AttributeKeyAckSuccess, fmt.Sprintf("%t", ack.Success())),
-		),
+		event,
 	)
 
 	// NOTE: acknowledgement will be written synchronously during IBC handler execution.
@@ -147,7 +153,7 @@ func (im IBCMiddleware) OnAcknowledgementPacket(
 		ctx.EventManager().EmitEvent(
 			sdk.NewEvent(
 				transfertypes.EventTypePacket,
-				sdk.NewAttribute(types.AttributeKeyAckError, resp.Error),
+				sdk.NewAttribute(transfertypes.AttributeKeyAckError, resp.Error),
 			),
 		)
 	}
@@ -185,58 +191,54 @@ func (im IBCMiddleware) OnTimeoutPacket(
 
 func handlerForwardTransferPacket(ctx sdk.Context, im IBCMiddleware, packet channeltypes.Packet, data transfertypes.FungibleTokenPacketData) error {
 	// parse out any forwarding info
-	receiver, finalDest, port, channel, err := ParseIncomingTransferField(data.Receiver)
-	switch {
-
-	// if this isn't a packet to forward, just use the transfer module normally
-	case finalDest == "" && port == "" && channel == "" && err == nil:
-		return im.keeper.OnRecvPacket(ctx, packet, data)
-
-	// If the parsing fails return a failure ack
-	case err != nil:
-		return fmt.Errorf("cannot parse packet fowrading information")
-
-	// Otherwise we have a packet to forward
-	default:
-		// Modify packet data to process packet transfer for this chain, omitting forwarding info
-		newData := data
-		newData.Receiver = receiver.String()
-		bz, err := types.ModuleCdc.MarshalJSON(&newData)
-		if err != nil {
-			return err
-		}
-		newPacket := packet
-		newPacket.Data = bz
-
-		if err = im.keeper.OnRecvPacket(ctx, newPacket, newData); err != nil {
-			return err
-		}
-		// recalculate denom, skip checks that were already done in app.OnRecvPacket
-		denom := GetDenomByIBCPacket(packet.GetSourcePort(), packet.GetSourceChannel(), packet.GetDestPort(), packet.GetDestChannel(), newData.GetDenom())
-		// parse the transfer amount
-		transferAmount, ok := sdk.NewIntFromString(data.Amount)
-		if !ok {
-			return sdkerrors.Wrapf(transfertypes.ErrInvalidAmount, "unable to parse forward transfer amount (%s) into sdk.Int", data.Amount)
-		}
-
-		var token = sdk.NewCoin(denom, transferAmount)
-		if err = im.keeper.SendTransfer(ctx, port, channel, token, receiver, finalDest, clienttypes.Height{}, uint64(ctx.BlockTime().Add(ForwardPacketTimeHour*time.Hour).UnixNano())); err != nil {
-			return fmt.Errorf("failed to forward transfer packet")
-		}
-		defer func() {
-			telemetry.IncrCounterWithLabels(
-				[]string{"ibc", types.ModuleName, "packet", "forward"},
-				1,
-				append(
-					[]metrics.Label{
-						telemetry.NewLabel(coretypes.LabelSourcePort, packet.GetSourcePort()),
-						telemetry.NewLabel(coretypes.LabelSourceChannel, packet.GetSourceChannel()),
-					},
-					telemetry.NewLabel(coretypes.LabelSource, "true"),
-				),
-			)
-		}()
+	parsedReceiver, err := parser.ParseReceiverData(data.Receiver)
+	if err != nil {
+		return err
 	}
+
+	if !parsedReceiver.ShouldForward {
+		return im.keeper.OnRecvPacket(ctx, packet, data)
+	}
+
+	newData := data
+	newData.Receiver = parsedReceiver.HostAccAddr.String()
+	bz, err := types.ModuleCdc.MarshalJSON(&newData)
+	if err != nil {
+		return err
+	}
+	newPacket := packet
+	newPacket.Data = bz
+
+	if err = im.keeper.OnRecvPacket(ctx, newPacket, newData); err != nil {
+		return err
+	}
+	// recalculate denom, skip checks that were already done in app.OnRecvPacket
+	denom := GetDenomByIBCPacket(packet.GetSourcePort(), packet.GetSourceChannel(), packet.GetDestPort(), packet.GetDestChannel(), newData.GetDenom())
+	// parse the transfer amount
+	transferAmount, ok := sdk.NewIntFromString(data.Amount)
+	if !ok {
+		return sdkerrors.Wrapf(transfertypes.ErrInvalidAmount, "unable to parse forward transfer amount (%s) into sdk.Int", data.Amount)
+	}
+
+	var token = sdk.NewCoin(denom, transferAmount)
+	err = im.keeper.SendTransfer(ctx, parsedReceiver.Port, parsedReceiver.Channel, token, parsedReceiver.HostAccAddr, parsedReceiver.Destination, clienttypes.Height{}, uint64(ctx.BlockTime().Add(ForwardPacketTimeHour*time.Hour).UnixNano()))
+	if err != nil {
+		return sdkerrors.Wrapf(sdkerrors.ErrInsufficientFunds, err.Error())
+	}
+	defer func() {
+		telemetry.IncrCounterWithLabels(
+			[]string{"ibc", types.ModuleName, "packet", "forward"},
+			1,
+			append(
+				[]metrics.Label{
+					telemetry.NewLabel(coretypes.LabelSourcePort, packet.GetSourcePort()),
+					telemetry.NewLabel(coretypes.LabelSourceChannel, packet.GetSourceChannel()),
+				},
+				telemetry.NewLabel(coretypes.LabelSource, "true"),
+			),
+		)
+	}()
+
 	return nil
 }
 
@@ -266,35 +268,4 @@ func GetDenomByIBCPacket(sourcePort, sourceChannel, destPort, destChannel, packe
 		denom = transfertypes.ParseDenomTrace(prefixedDenom).IBCDenom()
 	}
 	return denom
-}
-
-// ParseIncomingTransferField For now this assumes one hop, should be better parsing
-func ParseIncomingTransferField(receiverData string) (thisChainAddr sdk.AccAddress, finalDestination, port, channel string, err error) {
-	sep1 := strings.Split(receiverData, ":")
-	switch {
-	case len(sep1) == 1 && sep1[0] != "":
-		thisChainAddr, err = sdk.AccAddressFromBech32(receiverData)
-		return
-	case len(sep1) >= 2 && sep1[len(sep1)-1] != "":
-		finalDestination = strings.Join(sep1[1:], ":")
-	default:
-		return nil, "", "", "", fmt.Errorf("unparsable receiver field, need: '{address_on_this_chain}|{portid}/{channelid}:{final_dest_address}', got: '%s'", receiverData)
-	}
-	sep2 := strings.Split(sep1[0], "|")
-	if len(sep2) != 2 {
-		err = fmt.Errorf("formatting incorrect, need: '{address_on_this_chain}|{portid}/{channelid}:{final_dest_address}', got: '%s'", receiverData)
-		return
-	}
-	thisChainAddr, err = sdk.AccAddressFromBech32(sep2[0])
-	if err != nil {
-		return
-	}
-	sep3 := strings.Split(sep2[1], "/")
-	if len(sep3) != 2 {
-		err = fmt.Errorf("formatting incorrect, need: '{address_on_this_chain}|{portid}/{channelid}:{final_dest_address}', got: '%s'", receiverData)
-		return
-	}
-	port = sep3[0]
-	channel = sep3[1]
-	return
 }

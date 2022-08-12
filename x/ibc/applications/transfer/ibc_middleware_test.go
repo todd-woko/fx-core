@@ -5,6 +5,8 @@ import (
 	"math"
 	"testing"
 
+	"github.com/functionx/fx-core/v2/x/ibc/applications/transfer/parser"
+
 	"github.com/functionx/fx-core/v2/x/ibc/applications/transfer/types"
 
 	"github.com/functionx/fx-core/v2/x/ibc/applications/transfer"
@@ -255,6 +257,7 @@ func TestParseIncomingTransferField(t *testing.T) {
 	testCases := []struct {
 		name                string
 		input               string
+		expForward          bool
 		expThisChainAddress string
 		expFinalDestination string
 		expPort             string
@@ -262,9 +265,10 @@ func TestParseIncomingTransferField(t *testing.T) {
 		expPass             bool
 	}{
 		{
-			name:    "error - no-forward error thisChainAddress",
-			input:   "fx1av497q6kjky9j5v3z95668d57q9ha80pwe45qy",
-			expPass: false,
+			name:       "error - no-forward error thisChainAddress",
+			input:      "fx1av497q6kjky9j5v3z95668d57q9ha80pwe45qy",
+			expPass:    true,
+			expForward: false,
 		},
 		{
 			name:    "error - no-forward empty thisChainAddress",
@@ -295,6 +299,7 @@ func TestParseIncomingTransferField(t *testing.T) {
 			expPort:             "",
 			expChannel:          "channel-0",
 			expFinalDestination: "cosmos1av497q6kjky9j5v3z95668d57q9ha80p5fypd4",
+			expForward:          true,
 		},
 		{
 			name:                "ok - forward empty channelID",
@@ -304,6 +309,7 @@ func TestParseIncomingTransferField(t *testing.T) {
 			expPort:             "transfer",
 			expChannel:          "",
 			expFinalDestination: "cosmos1av497q6kjky9j5v3z95668d57q9ha80p5fypd4",
+			expForward:          true,
 		},
 		{
 			name:                "ok - forward",
@@ -313,12 +319,13 @@ func TestParseIncomingTransferField(t *testing.T) {
 			expPort:             "transfer",
 			expChannel:          "channel-0",
 			expFinalDestination: "cosmos1av497q6kjky9j5v3z95668d57q9ha80p5fypd4",
+			expForward:          true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			thisChainAddress, finalDestination, port, channel, err := transfer.ParseIncomingTransferField(tc.input)
+			pt, err := parser.ParseReceiverData(tc.input)
 			if tc.expPass {
 				require.NoError(t, err)
 			} else {
@@ -326,10 +333,14 @@ func TestParseIncomingTransferField(t *testing.T) {
 				return
 			}
 
-			require.EqualValues(t, tc.expThisChainAddress, thisChainAddress.String())
-			require.EqualValues(t, tc.expFinalDestination, finalDestination)
-			require.EqualValues(t, tc.expPort, port)
-			require.EqualValues(t, tc.expChannel, channel)
+			if !tc.expForward {
+				require.False(t, pt.ShouldForward)
+				return
+			}
+			require.EqualValues(t, tc.expThisChainAddress, pt.HostAccAddr.String())
+			require.EqualValues(t, tc.expFinalDestination, pt.Destination)
+			require.EqualValues(t, tc.expPort, pt.Port)
+			require.EqualValues(t, tc.expChannel, pt.Channel)
 		})
 	}
 }
