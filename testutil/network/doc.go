@@ -33,7 +33,7 @@ A typical testing flow might look like the following:
 		cfg := testutil.DefaultNetworkConfig()
 		cfg.NumValidators = 1
 
-		baseDir, err := ioutil.TempDir(s.T().TempDir(), cfg.ChainID)
+		baseDir, err := os.TempDir(s.T().TempDir(), cfg.ChainID)
 		s.Require().NoError(err)
 		s.T().Logf("created temporary directory: %s", baseDir)
 

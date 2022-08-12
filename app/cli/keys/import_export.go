@@ -133,7 +133,7 @@ func ImportKeyCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			//ioutil.ReadFile read all data, contains line break at the end of a file
+			//os.ReadFile read all data, contains line break at the end of a file
 			bz = bytes.TrimSuffix(bz, []byte{'\n'})
 
 			if len(bz) == 64 {
