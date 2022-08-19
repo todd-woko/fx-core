@@ -3,7 +3,7 @@ package parser_test
 import (
 	"testing"
 
-	"github.com/functionx/fx-core/v2/x/ibc/applications/transfer/parser"
+	"github.com/functionx/fx-core/v2/x/ibc/ibcrouter/parser"
 
 	"github.com/stretchr/testify/require"
 )

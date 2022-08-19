@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/functionx/fx-core/v2/x/ibc/ibcrouter"
+
 	"github.com/gorilla/mux"
 	"github.com/rakyll/statik/fs"
 	"github.com/spf13/cast"
@@ -526,10 +528,11 @@ func New(logger log.Logger, db dbm.DB, traceStore io.Writer, loadLatest bool, sk
 	fxTransferModule := fxtransfer.NewAppModule(myApp.TransferKeeper)
 	ibcTransferModule := ibctransfer.NewIBCModule(myApp.IBCTransferKeeper)
 	transferIBCModule := fxtransfer.NewIBCMiddleware(myApp.TransferKeeper, ibcTransferModule)
+	ibcRouterMiddleware := ibcrouter.NewIBCMiddleware(myApp.IBCTransferKeeper, myApp.IBCKeeper.ChannelKeeper, transferIBCModule)
 
 	// Create static IBC router, add transfer route, then set and seal it
 	ibcRouter := porttypes.NewRouter()
-	ibcRouter.AddRoute(ibctransfertypes.ModuleName, transferIBCModule)
+	ibcRouter.AddRoute(ibctransfertypes.ModuleName, ibcRouterMiddleware)
 	myApp.IBCKeeper.SetRouter(ibcRouter)
 
 	// register the staking hooks
