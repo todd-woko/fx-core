@@ -14,11 +14,13 @@ const (
 	// CancelSendToExternalGas default cancel send to external fee 0.7FX
 	CancelSendToExternalGas = 400000 // if set gas price 500Gwei, about use token 0.2FX
 	IncreaseBridgeFeeGas    = 400000
+	BridgeCoinFeeGas        = 100000
 
 	FIP20CrossChainMethodName      = "fip20CrossChain"
 	CrossChainMethodName           = "crossChain"
 	CancelSendToExternalMethodName = "cancelSendToExternal"
 	IncreaseBridgeFeeMethodName    = "increaseBridgeFee"
+	BridgeCoinMethodName           = "bridgeCoin"
 
 	CrossChainEventName           = "CrossChain"
 	CancelSendToExternalEventName = "CancelSendToExternal"

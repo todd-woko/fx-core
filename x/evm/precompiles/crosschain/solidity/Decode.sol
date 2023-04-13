@@ -19,6 +19,13 @@ library Decode {
         return result;
     }
 
+    function bridgeCoin(
+        bytes memory data
+    ) internal pure returns (uint256) {
+        uint256 amount = abi.decode(data, (uint256));
+        return amount;
+    }
+
     function ok(
         bool _result,
         bytes memory _data,

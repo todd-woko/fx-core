@@ -11,15 +11,15 @@ library Encode {
         string memory _memo
     ) internal pure returns (bytes memory) {
         return
-            abi.encodeWithSignature(
-                "crossChain(address,string,uint256,uint256,bytes32,string)",
-                _token,
-                _receipt,
-                _amount,
-                _fee,
-                _target,
-                _memo
-            );
+        abi.encodeWithSignature(
+            "crossChain(address,string,uint256,uint256,bytes32,string)",
+            _token,
+            _receipt,
+            _amount,
+            _fee,
+            _target,
+            _memo
+        );
     }
 
     function cancelSendToExternal(
@@ -27,11 +27,11 @@ library Encode {
         uint256 _txid
     ) internal pure returns (bytes memory) {
         return
-            abi.encodeWithSignature(
-                "cancelSendToExternal(string,uin256)",
-                _chain,
-                _txid
-            );
+        abi.encodeWithSignature(
+            "cancelSendToExternal(string,uin256)",
+            _chain,
+            _txid
+        );
     }
 
     function increaseBridgeFee(
@@ -41,12 +41,24 @@ library Encode {
         uint256 _fee
     ) internal pure returns (bytes memory) {
         return
-            abi.encodeWithSignature(
-                "increaseBridgeFee(string,uin256,address,uint256)",
-                _chain,
-                _txid,
-                _token,
-                _fee
-            );
+        abi.encodeWithSignature(
+            "increaseBridgeFee(string,uin256,address,uint256)",
+            _chain,
+            _txid,
+            _token,
+            _fee
+        );
+    }
+
+    function bridgeCoin(
+        address _token,
+        bytes32 _target
+    ) internal pure returns (bytes memory) {
+        return
+        abi.encodeWithSignature(
+            "bridgeCoin(address,bytes32)",
+            _token,
+            _target
+        );
     }
 }

@@ -48,4 +48,12 @@ contract CrossChain is ICrossChain {
         // precompile logic
         return true;
     }
+
+    function bridgeCoin(
+        address _token,
+        bytes32 _target
+    ) external virtual override view returns (uint256 _amount) {
+        // precompile logic
+        return 0;
+    }
 }

@@ -50,6 +50,13 @@ contract crosschain_test is CrossChain {
         return _increaseBridgeFee(_chain, _txID, _token, _fee);
     }
 
+    function bridgeCoin(
+        address _token,
+        bytes32 _target
+    ) public view override returns (uint256) {
+        return _bridgeCoin(_token, _target);
+    }
+
     function _crossChain(
         address _token,
         string memory _receipt,
@@ -75,8 +82,8 @@ contract crosschain_test is CrossChain {
         }
 
         (bool result, bytes memory data) = _crossChainAddress.call{
-        value : msg.value
-        }(Encode.crossChain(_token, _receipt, _amount, _fee, _target, _memo));
+                value: msg.value
+            }(Encode.crossChain(_token, _receipt, _amount, _fee, _target, _memo));
         Decode.ok(result, data, "cross-chain failed");
         return Decode.crossChain(data);
     }
@@ -104,4 +111,16 @@ contract crosschain_test is CrossChain {
         Decode.ok(result, data, "increase bridge fee failed");
         return Decode.increaseBridgeFee(data);
     }
+
+    function _bridgeCoin(
+        address _token,
+        bytes32 _target
+    ) internal view returns (uint256) {
+        (bool result, bytes memory data) = _crossChainAddress.staticcall(
+            Encode.bridgeCoin(_token, _target)
+        );
+        Decode.ok(result, data, "bridge coin failed");
+        return Decode.bridgeCoin(data);
+    }
+
 }
